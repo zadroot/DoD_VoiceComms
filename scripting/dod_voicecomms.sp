@@ -9,11 +9,13 @@
 */
 
 #pragma semicolon 1
+#include <clientprefs>
 
 // ====[ CONSTANTS ]==========================================================
 #define PLUGIN_NAME    "DoD:S Voice Communications"
 #define PLUGIN_VERSION "1.0"
 
+#define DOD_MAXPLAYERS 33
 #define SIZE_OF_INT    2147483647
 
 // ID's for events
@@ -46,7 +48,11 @@ enum VCType
 	Handle:ROUNDWIN
 };
 
-new	Handle:VC_Enabled, VC_Chance[VCType], bool:IsRoundEnd;
+new	Handle:VC_Enabled,
+	VC_Chance[VCType],
+	bool:IsRoundEnd,
+	Handle:VC_clientprefs,
+	bool:UseVoice[DOD_MAXPLAYERS + 1] = {true, ...};
 
 // ====[ PLUGIN ]=============================================================
 public Plugin:myinfo =
@@ -68,16 +74,15 @@ public OnPluginStart()
 	// Register version ConVar
 	CreateConVar("dod_voicecomms_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
-	// Register other ConVars
-	VC_Enabled          = CreateConVar("dod_voice_communications",    "1", "Whether or not enable Voice Communications",                                       FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",         "5", "Max chance bounds to voice command on every respawn",                              FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",          "4", "Max chance bounds to voice command when player is hurt (for more than 80 health)", FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",        "1", "Max chance bounds to voice command on grenade/smoke throws and a rocket shots",    FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",       "3", "Max chance bounds to voice command on point capture (for both teams)",             FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_capture_block", "3", "Max chance bounds to voice command on capture block\n1 means always use command",  FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",    "2", "Max chance bounds to voice command on bomb plant",                                 FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse",   "2", "Max chance bounds to voice command on bomb defuse",                                FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",      "3", "Max chance bounds to voice command when round ends (for both teams)",              FCVAR_PLUGIN, true, 1.0);
+	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                       FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",       "7", "Max chance bounds to voice command on every respawn",                              FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",        "6", "Max chance bounds to voice command when player is hurt (for more than 80 health)", FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",      "3", "Max chance bounds to voice command on grenade or smoke throw and a rocket shot",   FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",     "5", "Max chance bounds to voice command on point capture",                              FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block\n1 means always use command",  FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                 FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                                FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round ends (for both teams)",              FCVAR_PLUGIN, true, 1.0);
 
 	// Hook only main ConVar changes
 	HookConVarChange(VC_Enabled, OnConVarChange);
@@ -85,8 +90,13 @@ public OnPluginStart()
 	// Manually trigger OnConVarChange to hook plugin's events
 	OnConVarChange(VC_Enabled, "0", "1");
 
-	// Plugin config
-	AutoExecConfig(true, "dod_voicecomms.cfg");
+	// Creates a new clientprefs cookies
+	VC_clientprefs = RegClientCookie("VC Preferences", "Voice Communications", CookieAccess_Private);
+	SetCookieMenuItem(CookieMenuHandler_VoiceCommunications, MENU_NO_PAGINATION, "Voice Communications");
+
+	// Load "Yes/No" phrases
+	LoadTranslations("common.phrases");
+	AutoExecConfig(true, "dod_voicecomms");
 }
 
 /* OnConVarChange()
@@ -95,7 +105,6 @@ public OnPluginStart()
  * --------------------------------------------------------------------------- */
 public OnConVarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
-	// Main ConVar is a bool, so dont need to check whatever else
 	switch (StringToInt(newValue))
 	{
 		case false:
@@ -127,6 +136,62 @@ public OnConVarChange(Handle:convar, const String:oldValue[], const String:newVa
 	}
 }
 
+/* OnClientCookiesCached()
+ *
+ * Called once a client's saved cookies have been loaded from the database.
+ * -------------------------------------------------------------------------- */
+public OnClientCookiesCached(client)
+{
+	UseVoice[client] = GetVoiceCooikies(client);
+}
+
+/* GetVoiceCooikies()
+ *
+ * Retrieves client preferences related to Voice Communications;
+ * -------------------------------------------------------------------------- */
+bool:GetVoiceCooikies(client)
+{
+	// Get the cookie
+	decl String:buffer[8];
+	GetClientCookie(client, VC_clientprefs, buffer, sizeof(buffer));
+
+	// Enable voice comms if value equal to "Yes" or not initialized
+	return !StrEqual(buffer, "No", false) ? true : false;
+}
+
+/* CookieMenuHandler_VoiceCommunications()
+ *
+ * Clientprefs menu handler to select option for Voice Communications.
+ * -------------------------------------------------------------------------- */
+public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, any:info, String:buffer[], maxlen)
+{
+	// An option is being drawn for a menu
+	if (action == CookieMenuAction_DisplayOption)
+	{
+		decl String:status[8];
+
+		// Add option for enable/disable voice communications
+		if (UseVoice[client])
+			 Format(status, sizeof(status), "%T", "Yes", client);
+		else Format(status, sizeof(status), "%T", "No",  client);
+
+		// Draw cookies as a separate item
+		Format(buffer, maxlen, "Voice Communications: %s", status);
+	}
+	else // Select action
+	{
+		UseVoice[client] = !UseVoice[client];
+
+		// Set client cookies
+		if (UseVoice[client])
+			 SetClientCookie(client, VC_clientprefs, "Yes");
+		else SetClientCookie(client, VC_clientprefs, "No");
+
+		// Redraw cookies menu on selection
+		ShowCookieMenu(client);
+	}
+}
+
 /* Event_player_spawn()
  *
  * Called when a player spawns.
@@ -141,16 +206,20 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 		{
 			new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-			// Get random voice command
-			switch (Math_GetRandomInt(0, 6))
+			// Make sure client set voice commands via preferences
+			if (UseVoice[client])
 			{
-				case 0: FakeClientCommand(client, "voice_attack");
-				case 1: FakeClientCommand(client, "voice_sticktogether");
-				case 2: FakeClientCommand(client, "voice_mgahead");
-				case 3: FakeClientCommand(client, "voice_moveupmg");
-				case 4: FakeClientCommand(client, "voice_coverflanks");
-				case 5: FakeClientCommand(client, "voice_movewithtank");
-				case 6: FakeClientCommand(client, "voice_enemyahead");
+				// Get random voice command
+				switch (Math_GetRandomInt(0, 6))
+				{
+					case 0: FakeClientCommand(client, "voice_attack");
+					case 1: FakeClientCommand(client, "voice_sticktogether");
+					case 2: FakeClientCommand(client, "voice_mgahead");
+					case 3: FakeClientCommand(client, "voice_moveupmg");
+					case 4: FakeClientCommand(client, "voice_coverflanks");
+					case 5: FakeClientCommand(client, "voice_movewithtank");
+					case 6: FakeClientCommand(client, "voice_enemyahead");
+				}
 			}
 		}
 	}
@@ -162,22 +231,26 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
  * --------------------------------------------------------------------------- */
 public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	// Ignore
 	if (!IsRoundEnd)
 	{
 		if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[HURT])) == 1)
 		{
 			new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-			// Check whether or not client has less than 20 health
-			if (GetClientHealth(client) <= 20)
+			if (UseVoice[client])
 			{
-				// Emit one of random voice commands which give to know that player is weak
-				switch (Math_GetRandomInt(0, 3))
+				// Check whether or not client has less than 20 health
+				if (GetClientHealth(client) < 20)
 				{
-					case 0: FakeClientCommand(client, "voice_backup");
-					case 1: FakeClientCommand(client, "voice_medic");
-					case 2: FakeClientCommand(client, "voice_fireleft");
-					case 3: FakeClientCommand(client, "voice_fireright");
+					// Emit one of random voice commands which give to know that player is weak
+					switch (Math_GetRandomInt(0, 3))
+					{
+						case 0: FakeClientCommand(client, "voice_backup");
+						case 1: FakeClientCommand(client, "voice_medic");
+						case 2: FakeClientCommand(client, "voice_fireleft");
+						case 3: FakeClientCommand(client, "voice_fireright");
+					}
 				}
 			}
 		}
@@ -190,12 +263,10 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
  * --------------------------------------------------------------------------- */
 public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	// Ignore round end too
 	if (!IsRoundEnd)
 	{
 		if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[ATTACK])) == 1)
 		{
-			// short attacker
 			new client = GetClientOfUserId(GetEventInt(event, "attacker"));
 
 			// Check which weapon player is firing
@@ -204,8 +275,8 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 				// Rocket
 				case WeaponID_Bazooka, WeaponID_Pschreck:
 				{
-					// Notice teammates
-					FakeClientCommand(client, "voice_usebazooka");
+					// Make sure client wants to use voice, then use it
+					if (UseVoice[client]) FakeClientCommand(client, "voice_usebazooka");
 				}
 				case // Any grenades
 					WeaponID_Frag_US,
@@ -213,8 +284,8 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 					WeaponID_Riflegren_US,
 					WeaponID_Riflegren_GER:
 				{
-					// Counter-Strike!
-					FakeClientCommand(client, "voice_fireinhole");
+					// Counter-Strike
+					if (UseVoice[client]) FakeClientCommand(client, "voice_fireinhole");
 				}
 				case // Live grenades
 					WeaponID_Frag_US_Live,
@@ -222,13 +293,13 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 					WeaponID_Riflegren_US_Live,
 					WeaponID_Riflegren_GER_Live:
 				{
-					// Use different and more dangerously voice command here
-					FakeClientCommand(client, "voice_grenade");
+					// Use different voice command here
+					if (UseVoice[client]) FakeClientCommand(client, "voice_grenade");
 				}
 				case WeaponID_Smoke_US, WeaponID_Smoke_GER:
 				{
 					// Smoke
-					FakeClientCommand(client, "voice_usesmoke");
+					if (UseVoice[client]) FakeClientCommand(client, "voice_usesmoke");
 				}
 			}
 		}
@@ -317,15 +388,17 @@ public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadca
 	// Check random seed before initializing anything
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[CAPBLOCK])) == 1)
 	{
-		// short "blocker"
 		new client = GetEventInt(event, "blocker");
 
-		switch (Math_GetRandomInt(0, 3))
+		if (UseVoice[client])
 		{
-			case 0: FakeClientCommand(client, "voice_hold");
-			case 1: FakeClientCommand(client, "voice_cover");
-			case 2: FakeClientCommand(client, "voice_backup");
-			case 3: FakeClientCommand(client, "voice_areaclear");
+			switch (Math_GetRandomInt(0, 3))
+			{
+				case 0: FakeClientCommand(client, "voice_hold");
+				case 1: FakeClientCommand(client, "voice_cover");
+				case 2: FakeClientCommand(client, "voice_backup");
+				case 3: FakeClientCommand(client, "voice_areaclear");
+			}
 		}
 	}
 }
@@ -344,10 +417,13 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 	// Shout help/backup voice command on planter for calling a teammates
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[PLANT])) == 1)
 	{
-		switch (Math_GetRandomInt(0, 1))
+		if (UseVoice[client])
 		{
-			case 0: FakeClientCommand(client, "voice_cover");
-			case 1: FakeClientCommand(client, "voice_backup");
+			switch (Math_GetRandomInt(0, 1))
+			{
+				case 0: FakeClientCommand(client, "voice_cover");
+				case 1: FakeClientCommand(client, "voice_backup");
+			}
 		}
 	}
 
@@ -393,11 +469,14 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-		switch (Math_GetRandomInt(0, 2))
+		if (UseVoice[client])
 		{
-			case 0: FakeClientCommand(client, "voice_hold"); // Hold this position
-			case 1: FakeClientCommand(client, "voice_areaclear"); // Area clear
-			case 2: FakeClientCommand(client, "voice_moveupmg"); // Move up MG here
+			switch (Math_GetRandomInt(0, 2))
+			{
+				case 0: FakeClientCommand(client, "voice_hold"); // Hold this position
+				case 1: FakeClientCommand(client, "voice_areaclear"); // Area clear
+				case 2: FakeClientCommand(client, "voice_moveupmg"); // Move up MG here
+			}
 		}
 	}
 }
@@ -457,10 +536,11 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 		if (IsValidClient(randomLoser))
 		{
 			// Only 2 losers voice commands are exists
-			switch (Math_GetRandomInt(0, 1))
+			switch (Math_GetRandomInt(0, 2))
 			{
 				case 0: FakeClientCommand(randomLoser, "voice_ceasefire");
 				case 1: FakeClientCommand(randomLoser, "voice_fallback");
+				case 2: FakeClientCommand(randomLoser, "whatever_voice");
 			}
 		}
 	}
@@ -517,4 +597,4 @@ Math_GetRandomInt(min, max)
  *
  * Checks if a client is valid.
  * --------------------------------------------------------------------------- */
-bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client)) ? true : false;
+bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && UseVoice[client]) ? true : false;
