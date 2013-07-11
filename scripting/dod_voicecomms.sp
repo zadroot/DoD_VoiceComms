@@ -4,7 +4,7 @@
 * Description:
 *   Forces different voice commands on some events (when player hurts, spawn, captures a point etc).
 *
-* Version 1.0
+* Version 1.1
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
@@ -13,7 +13,7 @@
 
 // ====[ CONSTANTS ]==========================================================
 #define PLUGIN_NAME    "DoD:S Voice Communications"
-#define PLUGIN_VERSION "1.0"
+#define PLUGIN_VERSION "1.1"
 
 #define DOD_MAXPLAYERS 33
 #define SIZE_OF_INT    2147483647
@@ -540,7 +540,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 			{
 				case 0: FakeClientCommand(randomLoser, "voice_ceasefire");
 				case 1: FakeClientCommand(randomLoser, "voice_fallback");
-				case 2: FakeClientCommand(randomLoser, "whatever_voice");
+				case 2: FakeClientCommand(randomLoser, "voice_displace");
 			}
 		}
 	}
