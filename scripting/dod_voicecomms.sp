@@ -2,7 +2,7 @@
 * DoD:S Voice Communications by Root
 *
 * Description:
-*   Forces different voice commands on some events (when player hurts, spawn, captures a point etc).
+*   Forces different voice commands to players on some events (when player hurts, spawn, captures a point etc).
 *
 * Version 1.1
 * Changelog & more info at http://goo.gl/4nKhJ
@@ -11,14 +11,14 @@
 #pragma semicolon 1
 #include <clientprefs>
 
-// ====[ CONSTANTS ]==========================================================
+// ====[ CONSTANTS ]============================================================
 #define PLUGIN_NAME    "DoD:S Voice Communications"
 #define PLUGIN_VERSION "1.1"
 
 #define DOD_MAXPLAYERS 33
 #define SIZE_OF_INT    2147483647
 
-// ID's for events
+// For events
 enum
 {
 	WeaponID_Bazooka = 17,
@@ -35,7 +35,7 @@ enum
 	WeaponID_Riflegren_GER_Live
 };
 
-// ====[ VARIABES ]===========================================================
+// ====[ VARIABES ]=============================================================
 enum VCType
 {
 	Handle:SPAWN,
@@ -49,17 +49,17 @@ enum VCType
 };
 
 new	Handle:VC_Enabled,
+	Handle:VC_clientprefs,
 	VC_Chance[VCType],
 	bool:IsRoundEnd,
-	Handle:VC_clientprefs,
 	bool:UseVoice[DOD_MAXPLAYERS + 1] = {true, ...};
 
-// ====[ PLUGIN ]=============================================================
+// ====[ PLUGIN ]===============================================================
 public Plugin:myinfo =
 {
 	name        = PLUGIN_NAME,
 	author      = "Root",
-	description = "Forces different voice commands eventually!",
+	description = "Forces different voice commands to players eventually!",
 	version     = PLUGIN_VERSION,
 	url         = "http://dodsplugins.com/"
 }
@@ -68,21 +68,21 @@ public Plugin:myinfo =
 /* OnPluginStart()
  *
  * When the plugin starts up.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public OnPluginStart()
 {
 	// Register version ConVar
 	CreateConVar("dod_voicecomms_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
-	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                       FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",       "7", "Max chance bounds to voice command on every respawn",                              FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",        "6", "Max chance bounds to voice command when player is hurt (for more than 80 health)", FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",      "3", "Max chance bounds to voice command on grenade or smoke throw and a rocket shot",   FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",     "5", "Max chance bounds to voice command on point capture",                              FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block\n1 means always use command",  FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                 FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                                FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round ends (for both teams)",              FCVAR_PLUGIN, true, 1.0);
+	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                        FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",       "7", "Max chance bounds to voice command on every respawn\n1 means always use command",   FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",        "6", "Max chance bounds to voice command when player is hurt for (more than 80 health0",  FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",      "3", "Max chance bounds to voice command on grenade or smoke throwing and a rocket shot", FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",     "5", "Max chance bounds to voice command on point capture",                               FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block",                               FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                  FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                                 FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round ends (for both teams)",               FCVAR_PLUGIN, true, 1.0);
 
 	// Hook only main ConVar changes
 	HookConVarChange(VC_Enabled, OnConVarChange);
@@ -94,7 +94,7 @@ public OnPluginStart()
 	VC_clientprefs = RegClientCookie("VC Preferences", "Voice Communications", CookieAccess_Private);
 	SetCookieMenuItem(CookieMenuHandler_VoiceCommunications, MENU_NO_PAGINATION, "Voice Communications");
 
-	// Load "Yes/No" phrases
+	// Let's load "Yes/No" phrases
 	LoadTranslations("common.phrases");
 	AutoExecConfig(true, "dod_voicecomms");
 }
@@ -102,7 +102,7 @@ public OnPluginStart()
 /* OnConVarChange()
  *
  * When convar's value is changed.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public OnConVarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
 	switch (StringToInt(newValue))
@@ -139,16 +139,13 @@ public OnConVarChange(Handle:convar, const String:oldValue[], const String:newVa
 /* OnClientCookiesCached()
  *
  * Called once a client's saved cookies have been loaded from the database.
- * -------------------------------------------------------------------------- */
-public OnClientCookiesCached(client)
-{
-	UseVoice[client] = GetVoiceCooikies(client);
-}
+ * ----------------------------------------------------------------------------- */
+public OnClientCookiesCached(client) UseVoice[client] = GetVoiceCooikies(client);
 
 /* GetVoiceCooikies()
  *
- * Retrieves client preferences related to Voice Communications;
- * -------------------------------------------------------------------------- */
+ * Retrieves client preferences related to Voice Communications.
+ * ----------------------------------------------------------------------------- */
 bool:GetVoiceCooikies(client)
 {
 	// Get the cookie
@@ -162,7 +159,7 @@ bool:GetVoiceCooikies(client)
 /* CookieMenuHandler_VoiceCommunications()
  *
  * Clientprefs menu handler to select option for Voice Communications.
- * -------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, any:info, String:buffer[], maxlen)
 {
 	// An option is being drawn for a menu
@@ -195,7 +192,7 @@ public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, an
 /* Event_player_spawn()
  *
  * Called when a player spawns.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Ignore this event when round ends
@@ -228,7 +225,7 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_player_hurt()
  *
  * Called when a player gets hurt.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Ignore
@@ -260,7 +257,7 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_player_hurt()
  *
  * Called when a player attacks with a weapon.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	if (!IsRoundEnd)
@@ -309,7 +306,7 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 /* Event_Point_Captured()
  *
  * Called when a client(s) captured point.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize 'clients' to get one of random client from both teams
@@ -382,7 +379,7 @@ public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcas
 /* Event_Capture_Blocked()
  *
  * Called when a player blocked capture.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Check random seed before initializing anything
@@ -406,10 +403,10 @@ public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadca
 /* Event_Bomb_Planted()
  *
  * Called when a player planted bomb.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	decl clients[MaxClients], numClients, client, randomEnemy;
+	decl clients[MaxClients], i, numClients, client, randomEnemy;
 	client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 	numClients = 0;
@@ -431,7 +428,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[PLANT])) == 1)
 	{
 		// Loop through all clients
-		for (new i = 1; i <= MaxClients; i++)
+		for (i = 1; i <= MaxClients; i++)
 		{
 			// From enemies team
 			if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) != GetClientTeam(client))
@@ -461,7 +458,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Bomb_Defused()
  *
  * Called when a player defused bomb.
- *---------------------------------------------------------------------------- */
+ *------------------------------------------------------------------------------ */
 public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Continue after successfull random seed
@@ -484,16 +481,16 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Round_End()
  *
  * Called when a round ends.
-  ---------------------------------------------------------------------------- */
+  ------------------------------------------------------------------------------ */
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize clients, winners, losers and random clients
-	decl clients[MaxClients], numWinners, numLosers, randomWinner, randomLoser;
+	decl clients[MaxClients], client, numWinners, numLosers, randomWinner, randomLoser;
 
 	// Reset amount of winners and losers to properly check how many players are available in both teams
 	numWinners = numLosers = 0;
 
-	for (new client = 1; client <= MaxClients; client++)
+	for (client = 1; client <= MaxClients; client++)
 	{
 		// Loop through only ingame and alive players
 		if (IsClientInGame(client) && IsPlayerAlive(client))
@@ -552,20 +549,23 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Game_Over()
  *
  * Called when a round starts and game ends.
-* ---------------------------------------------------------------------------- */
+* ------------------------------------------------------------------------------ */
 public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// I have to use two events here
-	new clients[MaxClients], numClients;
-	for (new client = 1; client <= MaxClients; client++)
+	decl clients[MaxClients], client, numClients, randomPlayer; numClients = 0;
+	for (client = 1; client <= MaxClients; client++)
 	{
 		if (IsClientInGame(client) && IsPlayerAlive(client))
 		{
-			// Emit 'cease fire' voice - because on those events players cant fire
+			// Emit 'cease fire' voice, because on those events players cant fire
 			clients[numClients++] = client;
-			FakeClientCommand(clients[Math_GetRandomInt(0, numClients - 1)], "voice_ceasefire");
+			randomPlayer = clients[Math_GetRandomInt(0, numClients - 1)];
 		}
 	}
+
+	// Does random player is valid?
+	if (IsValidClient(randomPlayer)) FakeClientCommand(randomPlayer, "voice_ceasefire");
 
 	// Set round end boolean to false
 	IsRoundEnd = false;
@@ -596,5 +596,5 @@ Math_GetRandomInt(min, max)
 /* IsValidClient()
  *
  * Checks if a client is valid.
- * --------------------------------------------------------------------------- */
+ * ----------------------------------------------------------------------------- */
 bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && UseVoice[client]) ? true : false;
