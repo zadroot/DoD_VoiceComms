@@ -9,6 +9,7 @@
 */
 
 #pragma semicolon 1
+
 #include <clientprefs>
 
 // ====[ CONSTANTS ]============================================================
@@ -83,7 +84,7 @@ public OnPluginStart()
 	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                               FCVAR_PLUGIN, true, 1.0);
 	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round over",                              FCVAR_PLUGIN, true, 1.0);
 
-	// Hook changes for main ConVar
+	// Hook changes for main CVar
 	HookConVarChange(VC_Enabled, OnConVarChange);
 
 	// Manually trigger OnConVarChange to hook plugin's events
@@ -227,6 +228,7 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
  * ----------------------------------------------------------------------------- */
 public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	// Ignore
 	if (!IsRoundEnd)
 	{
 		if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[HURT])) == 1)
@@ -235,7 +237,7 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 
 			if (IsValidClient(client))
 			{
-				// Check whether or not client has less than 20 health
+				// Check whether or not client got less than 20 hp
 				if (GetClientHealth(client) < 20)
 				{
 					// Emit one of random voice commands which give to know that player is weak
@@ -565,9 +567,7 @@ public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 
 	// Use voice command on random valid player
 	if (IsValidClient(randomPlayer))
-	{
 		FakeClientCommand(randomPlayer, "voice_ceasefire");
-	}
 
 	// Set round end boolean to false
 	IsRoundEnd = false;
