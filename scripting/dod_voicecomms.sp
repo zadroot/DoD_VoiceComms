@@ -4,7 +4,7 @@
 * Description:
 *   Forces different voice commands to players on some events (when player hurts, spawn, captures a point etc).
 *
-* Version 1.1
+* Version 1.2
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
@@ -13,10 +13,9 @@
 
 // ====[ CONSTANTS ]============================================================
 #define PLUGIN_NAME    "DoD:S Voice Communications"
-#define PLUGIN_VERSION "1.1"
+#define PLUGIN_VERSION "1.2"
 
 #define DOD_MAXPLAYERS 33
-#define SIZE_OF_INT    2147483647
 
 // For events
 enum
@@ -71,7 +70,7 @@ public Plugin:myinfo =
  * ----------------------------------------------------------------------------- */
 public OnPluginStart()
 {
-	// Register version ConVar
+	// Register ConVars
 	CreateConVar("dod_voicecomms_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
 	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                      FCVAR_PLUGIN, true, 0.0, true, 1.0);
@@ -82,9 +81,9 @@ public OnPluginStart()
 	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block",                             FCVAR_PLUGIN, true, 1.0);
 	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                FCVAR_PLUGIN, true, 1.0);
 	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                               FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round starts/ends",                       FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round over",                              FCVAR_PLUGIN, true, 1.0);
 
-	// Hook only main ConVar changes
+	// Hook changes for main ConVar
 	HookConVarChange(VC_Enabled, OnConVarChange);
 
 	// Manually trigger OnConVarChange to hook plugin's events
@@ -94,7 +93,7 @@ public OnPluginStart()
 	VC_clientprefs = RegClientCookie("VC Preferences", "Voice Communications", CookieAccess_Private);
 	SetCookieMenuItem(CookieMenuHandler_VoiceCommunications, MENU_NO_PAGINATION, "Voice Communications");
 
-	// Let's load "Yes/No" phrases
+	// Load "Yes/No" phrases
 	LoadTranslations("common.phrases");
 	AutoExecConfig(true, "dod_voicecomms");
 }
@@ -152,7 +151,7 @@ bool:GetVoiceCooikies(client)
 	decl String:buffer[8];
 	GetClientCookie(client, VC_clientprefs, buffer, sizeof(buffer));
 
-	// Enable voice comms if value equal to "Yes" or not initialized
+	// Enable voice comms if value is not equal to "No"
 	return !StrEqual(buffer, "No", false) ? true : false;
 }
 
@@ -204,7 +203,7 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 			new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 			// Make sure client set voice commands via preferences
-			if (UseVoice[client])
+			if (IsValidClient(client))
 			{
 				// Get random voice command
 				switch (Math_GetRandomInt(0, 6))
@@ -228,14 +227,13 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
  * ----------------------------------------------------------------------------- */
 public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	// Ignore
 	if (!IsRoundEnd)
 	{
 		if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[HURT])) == 1)
 		{
 			new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-			if (UseVoice[client])
+			if (IsValidClient(client))
 			{
 				// Check whether or not client has less than 20 health
 				if (GetClientHealth(client) < 20)
@@ -271,8 +269,8 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 			{
 				case WeaponID_Bazooka, WeaponID_Pschreck:
 				{
-					// Make sure client wants to use voice, then use it
-					if (UseVoice[client]) FakeClientCommand(client, "voice_usebazooka");
+					// Make sure client wants to use voice, so then use it
+					if (IsValidClient(client)) FakeClientCommand(client, "voice_usebazooka");
 				}
 				case // Any grenades
 					WeaponID_Frag_US,
@@ -280,8 +278,8 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 					WeaponID_Riflegren_US,
 					WeaponID_Riflegren_GER:
 				{
-					// Counter-Strike style
-					if (UseVoice[client]) FakeClientCommand(client, "voice_fireinhole");
+					// A Counter-Strike style!
+					if (IsValidClient(client)) FakeClientCommand(client, "voice_fireinhole");
 				}
 				case // Live grenades
 					WeaponID_Frag_US_Live,
@@ -290,12 +288,12 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 					WeaponID_Riflegren_GER_Live:
 				{
 					// Use different voice command here
-					if (UseVoice[client]) FakeClientCommand(client, "voice_grenade");
+					if (IsValidClient(client)) FakeClientCommand(client, "voice_grenade");
 				}
 				case WeaponID_Smoke_US, WeaponID_Smoke_GER:
 				{
-					// Smoke
-					if (UseVoice[client]) FakeClientCommand(client, "voice_usesmoke");
+					// A smoke
+					if (IsValidClient(client)) FakeClientCommand(client, "voice_usesmoke");
 				}
 			}
 		}
@@ -322,7 +320,7 @@ public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcas
 	// Now through all clients
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && IsPlayerAlive(i))
+		if (IsValidClient(i))
 		{
 			if (GetClientTeam(i) == capteam)
 			{
@@ -342,7 +340,6 @@ public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcas
 	// Check whether or not random seed is matches
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[CAPTURE])) == 1)
 	{
-		// Check whether or not any teammate of capper is valid
 		if (IsValidClient(randomAttacker))
 		{
 			switch (Math_GetRandomInt(0, 4))
@@ -359,6 +356,7 @@ public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcas
 	// Teammates random may not match, so check enemies now
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[CAPTURE])) == 1)
 	{
+		// There may be no random defenders, so check if they're valid before forcing a command
 		if (IsValidClient(randomDefender))
 		{
 			// Get random voice command
@@ -386,7 +384,7 @@ public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadca
 	{
 		new client = GetEventInt(event, "blocker");
 
-		if (UseVoice[client])
+		if (IsValidClient(client))
 		{
 			switch (Math_GetRandomInt(0, 3))
 			{
@@ -413,7 +411,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 	// Shout help/backup voice command on planter for calling a teammates
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[PLANT])) == 1)
 	{
-		if (UseVoice[client])
+		if (IsValidClient(client))
 		{
 			switch (Math_GetRandomInt(0, 1))
 			{
@@ -430,16 +428,16 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 		for (i = 1; i <= MaxClients; i++)
 		{
 			// From enemies team
-			if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) != GetClientTeam(client))
+			if (IsValidClient(i) && GetClientTeam(i) != GetClientTeam(client))
 			{
 				clients[numClients++] = i;
 				randomEnemy = clients[Math_GetRandomInt(0, numClients - 1)];
 			}
 		}
 
-		// If enemy is valid, execute some warning commands on it
 		if (IsValidClient(randomEnemy))
 		{
+			// If enemy is valid, execute some warning commands on it
 			switch (Math_GetRandomInt(0, 6))
 			{
 				case 0: FakeClientCommand(randomEnemy, "voice_attack");
@@ -465,7 +463,7 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-		if (UseVoice[client])
+		if (IsValidClient(client))
 		{
 			switch (Math_GetRandomInt(0, 2))
 			{
@@ -492,7 +490,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 	for (client = 1; client <= MaxClients; client++)
 	{
 		// Loop through only ingame and alive players
-		if (IsClientInGame(client) && IsPlayerAlive(client))
+		if (IsValidClient(client))
 		{
 			// Winners
 			if (GetClientTeam(client) == GetEventInt(event, "team"))
@@ -528,10 +526,10 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[ROUNDWIN])) == 1)
 	{
-		// Any loser is alive?
+		// There may be no losers in opposite team, so check whether or not there is any valid enemy
 		if (IsValidClient(randomLoser))
 		{
-			// Only 2 losers voice commands are exists
+			// Only 3 losers voice commands are exists
 			switch (Math_GetRandomInt(0, 2))
 			{
 				case 0: FakeClientCommand(randomLoser, "voice_ceasefire");
@@ -551,46 +549,38 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 * ------------------------------------------------------------------------------ */
 public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	// I have to use two events here
+	// Plugin using two events here
 	decl clients[MaxClients], client, numClients, randomPlayer;
-	numClients  = 0; // 0
+	numClients = 0; // 0
+
 	for (client = 1; client <= MaxClients; client++)
 	{
-		if (IsClientInGame(client) && IsPlayerAlive(client))
+		if (IsValidClient(client))
 		{
-			// Emit 'cease fire' voice, because on those events players cant fire
+			// Emit 'cease fire' voice cmd, because on this event players cant fire
 			clients[numClients++] = client;
 			randomPlayer = clients[Math_GetRandomInt(0, numClients - 1)];
 		}
 	}
 
-	// Does random player is valid?
-	if (IsValidClient(randomPlayer)) FakeClientCommand(randomPlayer, "voice_ceasefire");
+	// Use voice command on random valid player
+	if (IsValidClient(randomPlayer))
+	{
+		FakeClientCommand(randomPlayer, "voice_ceasefire");
+	}
 
 	// Set round end boolean to false
 	IsRoundEnd = false;
 }
 
-/**
- * Returns a random, uniform Integer number in the specified (inclusive) range.
- * This is safe to use multiple times in a function.
- * The seed is set automatically for each plugin.
- * Rewritten by MatthiasVance, thanks.
+/* Math_GetRandomInt()
  *
- * @param min			Min value used as lower border
- * @param max			Max value used as upper border
- * @return				Random Integer number between min and max
- */
+ * Returns a random, uniform Integer number in the specified (inclusive) range.
+ * This is safe to use multiple times in a function. Copied from SMAC stocks.
+* ------------------------------------------------------------------------------ */
 Math_GetRandomInt(min, max)
 {
-	new random = GetURandomInt();
-
-	if (random == 0)
-	{
-		random++;
-	}
-
-	return RoundToCeil(float(random) / (float(SIZE_OF_INT) / float(max - min + 1))) + min - 1;
+	return RoundToNearest(GetURandomFloat() * float(max - min) + float(min));
 }
 
 /* IsValidClient()
