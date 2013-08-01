@@ -74,15 +74,15 @@ public OnPluginStart()
 	// Register version ConVar
 	CreateConVar("dod_voicecomms_version", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
-	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                        FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",       "7", "Max chance bounds to voice command on every respawn\n1 means always use command",   FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",        "6", "Max chance bounds to voice command when player is hurt for (more than 80 health0",  FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",      "3", "Max chance bounds to voice command on grenade or smoke throwing and a rocket shot", FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",     "5", "Max chance bounds to voice command on point capture",                               FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block",                               FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                  FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                                 FCVAR_PLUGIN, true, 1.0);
-	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round ends (for both teams)",               FCVAR_PLUGIN, true, 1.0);
+	VC_Enabled          = CreateConVar("dod_voice_communications",  "1", "Whether or not enable Voice Communications",                                      FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	VC_Chance[SPAWN]    = CreateConVar("dod_vc_chance_spawn",       "7", "Max chance bounds to voice command on every respawn\n1 means always use command", FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[HURT]     = CreateConVar("dod_vc_chance_hurt",        "6", "Max chance bounds to voice command when player is hurt for more than 80 health",  FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ATTACK]   = CreateConVar("dod_vc_chance_attack",      "3", "Max chance bounds to voice command on grenade/smoke throwing and a rocket shot",  FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPTURE]  = CreateConVar("dod_vc_chance_capture",     "5", "Max chance bounds to voice command on point capture",                             FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[CAPBLOCK] = CreateConVar("dod_vc_chance_block",       "5", "Max chance bounds to voice command on capture block",                             FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[PLANT]    = CreateConVar("dod_vc_chance_bomb_plant",  "4", "Max chance bounds to voice command on bomb plant",                                FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[DEFUSE]   = CreateConVar("dod_vc_chance_bomb_defuse", "4", "Max chance bounds to voice command on bomb defuse",                               FCVAR_PLUGIN, true, 1.0);
+	VC_Chance[ROUNDWIN] = CreateConVar("dod_vc_chance_roundwin",    "6", "Max chance bounds to voice command when round starts/ends",                       FCVAR_PLUGIN, true, 1.0);
 
 	// Hook only main ConVar changes
 	HookConVarChange(VC_Enabled, OnConVarChange);
@@ -162,7 +162,7 @@ bool:GetVoiceCooikies(client)
  * ----------------------------------------------------------------------------- */
 public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, any:info, String:buffer[], maxlen)
 {
-	// An option is being drawn for a menu
+	// A cookies option is being drawn for a menu
 	if (action == CookieMenuAction_DisplayOption)
 	{
 		decl String:status[8];
@@ -175,7 +175,7 @@ public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, an
 		// Draw cookies as a separate item
 		Format(buffer, maxlen, "Voice Communications: %s", status);
 	}
-	else // Select action
+	else // Other is always select
 	{
 		UseVoice[client] = !UseVoice[client];
 
@@ -269,7 +269,6 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 			// Check which weapon player is firing
 			switch (GetEventInt(event, "weapon"))
 			{
-				// Rocket
 				case WeaponID_Bazooka, WeaponID_Pschreck:
 				{
 					// Make sure client wants to use voice, then use it
@@ -281,7 +280,7 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 					WeaponID_Riflegren_US,
 					WeaponID_Riflegren_GER:
 				{
-					// Counter-Strike
+					// Counter-Strike style
 					if (UseVoice[client]) FakeClientCommand(client, "voice_fireinhole");
 				}
 				case // Live grenades
@@ -310,32 +309,32 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize 'clients' to get one of random client from both teams
-	decl clients[MaxClients], numAttackers, numDefenders,
-	randomAttacker, randomDefender, i, x, String:cappers[256];
+	decl clients[MaxClients], numAttackers, numDefenders, i,
+	capteam, randomAttacker, randomDefender, String:cappers[256];
 	GetEventString(event, "cappers", cappers, sizeof(cappers));
 
 	numAttackers = numDefenders = 0;
 
 	// Loop through all cappers
 	for (i = 0; i < strlen(cappers); i++)
+		capteam = GetClientTeam(cappers[i]);
+
+	// Now through all clients
+	for (i = 1; i <= MaxClients; i++)
 	{
-		// Now through all clients
-		for (x = 1; x <= MaxClients; x++)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
 		{
-			if (IsClientInGame(x) && IsPlayerAlive(x))
+			if (GetClientTeam(i) == capteam)
 			{
-				if (GetClientTeam(x) == GetClientTeam(cappers[i]))
-				{
-					// Get max amount of teammates
-					clients[numAttackers++] = x;
-					randomAttacker = clients[Math_GetRandomInt(0, numAttackers - 1)];
-				}
-				else
-				{
-					// And enemies
-					clients[numDefenders++] = x;
-					randomDefender = clients[Math_GetRandomInt(0, numDefenders - 1)];
-				}
+				// Get max amount of teammates
+				clients[numAttackers++] = i;
+				randomAttacker = clients[Math_GetRandomInt(0, numAttackers - 1)];
+			}
+			else
+			{
+				// And enemies
+				clients[numDefenders++] = i;
+				randomDefender = clients[Math_GetRandomInt(0, numDefenders - 1)];
 			}
 		}
 	}
@@ -553,7 +552,8 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// I have to use two events here
-	decl clients[MaxClients], client, numClients, randomPlayer; numClients = 0;
+	decl clients[MaxClients], client, numClients, randomPlayer;
+	numClients  = 0; // 0
 	for (client = 1; client <= MaxClients; client++)
 	{
 		if (IsClientInGame(client) && IsPlayerAlive(client))
