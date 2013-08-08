@@ -4,7 +4,7 @@
 * Description:
 *   Forces different voice commands to players on some events (when player hurts, spawn, captures a point etc).
 *
-* Version 1.2
+* Version 1.3
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
@@ -12,13 +12,13 @@
 
 #include <clientprefs>
 
-// ====[ CONSTANTS ]============================================================
+// ====[ CONSTANTS ]=============================================================
 #define PLUGIN_NAME    "DoD:S Voice Communications"
-#define PLUGIN_VERSION "1.2"
+#define PLUGIN_VERSION "1.3"
 
 #define DOD_MAXPLAYERS 33
 
-// For events
+// IDs of events
 enum
 {
 	WeaponID_Bazooka = 17,
@@ -35,7 +35,7 @@ enum
 	WeaponID_Riflegren_GER_Live
 };
 
-// ====[ VARIABES ]=============================================================
+// ====[ VARIABES ]==============================================================
 enum VCType
 {
 	Handle:SPAWN,
@@ -54,7 +54,7 @@ new	Handle:VC_Enabled,
 	bool:IsRoundEnd,
 	bool:UseVoice[DOD_MAXPLAYERS + 1] = {true, ...};
 
-// ====[ PLUGIN ]===============================================================
+// ====[ PLUGIN ]================================================================
 public Plugin:myinfo =
 {
 	name        = PLUGIN_NAME,
@@ -68,7 +68,7 @@ public Plugin:myinfo =
 /* OnPluginStart()
  *
  * When the plugin starts up.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public OnPluginStart()
 {
 	// Register ConVars
@@ -102,7 +102,7 @@ public OnPluginStart()
 /* OnConVarChange()
  *
  * When convar's value is changed.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public OnConVarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
 	switch (StringToInt(newValue))
@@ -139,13 +139,13 @@ public OnConVarChange(Handle:convar, const String:oldValue[], const String:newVa
 /* OnClientCookiesCached()
  *
  * Called once a client's saved cookies have been loaded from the database.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public OnClientCookiesCached(client) UseVoice[client] = GetVoiceCooikies(client);
 
 /* GetVoiceCooikies()
  *
  * Retrieves client preferences related to Voice Communications.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 bool:GetVoiceCooikies(client)
 {
 	// Get the cookie
@@ -159,7 +159,7 @@ bool:GetVoiceCooikies(client)
 /* CookieMenuHandler_VoiceCommunications()
  *
  * Clientprefs menu handler to select option for Voice Communications.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, any:info, String:buffer[], maxlen)
 {
 	// A cookies option is being drawn for a menu
@@ -192,7 +192,7 @@ public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, an
 /* Event_player_spawn()
  *
  * Called when a player spawns.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Ignore this event when round ends
@@ -225,7 +225,7 @@ public Event_Player_Spawn(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_player_hurt()
  *
  * Called when a player gets hurt.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Ignore
@@ -257,7 +257,7 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_player_hurt()
  *
  * Called when a player attacks with a weapon.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	if (!IsRoundEnd)
@@ -305,15 +305,13 @@ public Event_Player_Attack(Handle:event, const String:name[], bool:dontBroadcast
 /* Event_Point_Captured()
  *
  * Called when a client(s) captured point.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize 'clients' to get one of random client from both teams
-	decl clients[MaxClients], numAttackers, numDefenders, i,
+	new clients[MaxClients], numAttackers, numDefenders, i,
 	capteam, randomAttacker, randomDefender, String:cappers[256];
 	GetEventString(event, "cappers", cappers, sizeof(cappers));
-
-	numAttackers = numDefenders = 0;
 
 	// Loop through all cappers
 	for (i = 0; i < strlen(cappers); i++)
@@ -378,7 +376,7 @@ public Event_Point_Captured(Handle:event, const String:name[], bool:dontBroadcas
 /* Event_Capture_Blocked()
  *
  * Called when a player blocked capture.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Check random seed before initializing anything
@@ -402,13 +400,11 @@ public Event_Capture_Blocked(Handle:event, const String:name[], bool:dontBroadca
 /* Event_Bomb_Planted()
  *
  * Called when a player planted bomb.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	decl clients[MaxClients], i, numClients, client, randomEnemy;
+	new clients[MaxClients], client, numClients, randomEnemy;
 	client = GetClientOfUserId(GetEventInt(event, "userid"));
-
-	numClients = 0;
 
 	// Shout help/backup voice command on planter for calling a teammates
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[PLANT])) == 1)
@@ -427,7 +423,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 	if (Math_GetRandomInt(1, GetConVarInt(VC_Chance[PLANT])) == 1)
 	{
 		// Loop through all clients
-		for (i = 1; i <= MaxClients; i++)
+		for (new i = 1; i <= MaxClients; i++)
 		{
 			// From enemies team
 			if (IsValidClient(i) && GetClientTeam(i) != GetClientTeam(client))
@@ -457,7 +453,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Bomb_Defused()
  *
  * Called when a player defused bomb.
- *------------------------------------------------------------------------------ */
+ *------------------------------------------------------------------------------- */
 public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Continue after successfull random seed
@@ -480,15 +476,11 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Round_End()
  *
  * Called when a round ends.
-  ------------------------------------------------------------------------------ */
+  ------------------------------------------------------------------------------- */
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize clients, winners, losers and random clients
-	decl clients[MaxClients], client, numWinners, numLosers, randomWinner, randomLoser;
-
-	// Reset amount of winners and losers to properly check how many players are available in both teams
-	numWinners = numLosers = 0;
-
+	new clients[MaxClients], client, numWinners, numLosers, randomWinner, randomLoser;
 	for (client = 1; client <= MaxClients; client++)
 	{
 		// Loop through only ingame and alive players
@@ -548,13 +540,11 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 /* Event_Game_Over()
  *
  * Called when a round starts and game ends.
-* ------------------------------------------------------------------------------ */
+* ------------------------------------------------------------------------------- */
 public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Plugin using two events here
-	decl clients[MaxClients], client, numClients, randomPlayer;
-	numClients = 0; // 0
-
+	new clients[MaxClients], client, numClients, randomPlayer;
 	for (client = 1; client <= MaxClients; client++)
 	{
 		if (IsValidClient(client))
@@ -577,7 +567,7 @@ public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
  *
  * Returns a random, uniform Integer number in the specified (inclusive) range.
  * This is safe to use multiple times in a function. Copied from SMAC stocks.
-* ------------------------------------------------------------------------------ */
+* ------------------------------------------------------------------------------- */
 Math_GetRandomInt(min, max)
 {
 	return RoundToNearest(GetURandomFloat() * float(max - min) + float(min));
@@ -586,5 +576,5 @@ Math_GetRandomInt(min, max)
 /* IsValidClient()
  *
  * Checks if a client is valid.
- * ----------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------------ */
 bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && UseVoice[client]) ? true : false;
