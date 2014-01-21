@@ -8,8 +8,6 @@
 * Changelog & more info at http://goo.gl/4nKhJ
 */
 
-#pragma semicolon 1
-
 #include <clientprefs>
 
 // ====[ CONSTANTS ]=============================================================
@@ -18,7 +16,7 @@
 
 #define DOD_MAXPLAYERS 33
 
-// IDs of events
+// ID's of events
 enum
 {
 	WeaponID_Bazooka = 17,
@@ -168,9 +166,7 @@ public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, an
 		decl String:status[8];
 
 		// Add option for enable/disable voice communications
-		if (UseVoice[client])
-			 Format(status, sizeof(status), "%T", "Yes", client);
-		else Format(status, sizeof(status), "%T", "No",  client);
+		Format(status, sizeof(status), "%T", UseVoice[client] ? "Yes" : "No", client);
 
 		// Draw cookies as a separate item
 		Format(buffer, maxlen, "Voice Communications: %s", status);
@@ -178,11 +174,7 @@ public CookieMenuHandler_VoiceCommunications(client, CookieMenuAction:action, an
 	else // Other is always select
 	{
 		UseVoice[client] = !UseVoice[client];
-
-		// Set client cookies
-		if (UseVoice[client])
-			 SetClientCookie(client, VC_clientprefs, "Yes");
-		else SetClientCookie(client, VC_clientprefs, "No");
+		SetClientCookie(client, VC_clientprefs, UseVoice[client] ? "Yes" : "No");
 
 		// Redraw cookies menu on selection
 		ShowCookieMenu(client);
@@ -480,8 +472,8 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Initialize clients, winners, losers and random clients
-	new clients[MaxClients], client, numWinners, numLosers, randomWinner, randomLoser;
-	for (client = 1; client <= MaxClients; client++)
+	new clients[MaxClients], numWinners, numLosers, randomWinner, randomLoser;
+	for (new client = 1; client <= MaxClients; client++)
 	{
 		// Loop through only ingame and alive players
 		if (IsValidClient(client))
@@ -492,8 +484,6 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 				clients[numWinners++] = client;
 				randomWinner = clients[Math_GetRandomInt(0, numWinners - 1)];
 			}
-
-			// Not a winners
 			else
 			{
 				clients[numLosers++] = client;
@@ -544,8 +534,8 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	// Plugin using two events here
-	new clients[MaxClients], client, numClients, randomPlayer;
-	for (client = 1; client <= MaxClients; client++)
+	new clients[MaxClients], numClients, randomPlayer;
+	for (new client = 1; client <= MaxClients; client++)
 	{
 		if (IsValidClient(client))
 		{
@@ -566,7 +556,7 @@ public Event_Game_Over(Handle:event, const String:name[], bool:dontBroadcast)
 /* Math_GetRandomInt()
  *
  * Returns a random, uniform Integer number in the specified (inclusive) range.
- * This is safe to use multiple times in a function. Copied from SMAC stocks.
+ * This is safe to use multiple times in a function. Credits goes to from SMAC team.
 * ------------------------------------------------------------------------------- */
 Math_GetRandomInt(min, max)
 {
@@ -577,4 +567,4 @@ Math_GetRandomInt(min, max)
  *
  * Checks if a client is valid.
  * ------------------------------------------------------------------------------ */
-bool:IsValidClient(client) return (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && UseVoice[client]) ? true : false;
+bool:IsValidClient(client) return (1 <= client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && UseVoice[client]) ? true : false;
